@@ -300,6 +300,12 @@ export function needsDeepCast(f) {
   return behaviorOf(f) === 'bottom'
 }
 
+export const BOSS_FISH = {
+  id: 'leviathan', name: 'Leviathan (Boss)', habitat: 'deepsea', rarity: 'legendary', template: 'shark',
+  palette: { body: '#1a1c23', fin: '#c0392b', tail: '#c0392b', dark: '#0a0a0d', lure: '#ff3b3b' },
+  minSize: 1000, maxSize: 3000, baseValue: 10000, fight: 18, biteMin: 1000, biteMax: 2000
+}
+
 export function fishByZone(zoneId) {
   return FISH.filter((f) => f.habitat === zoneId)
 }

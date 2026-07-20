@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { drawFish } from '../pixel/sprites.js'
-import { fishByZone, behaviorOf, fightStyleOf, activityMul, needsDeepCast } from '../data/fish.js'
+import { fishByZone, behaviorOf, fightStyleOf, activityMul, needsDeepCast, BOSS_FISH } from '../data/fish.js'
 import { RARITY } from '../data/zones.js'
 import { rollSize } from '../game.js'
 import { rollTrash, rollTreasure } from '../data/items.js'
@@ -245,6 +245,15 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
 
     actionsRef.current.cast = () => {
       if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 260, g.targetY || 360) }
+    }
+    actionsRef.current.triggerBoss = () => {
+      if (g.phase === 'idle') {
+        sfx.resume();
+        g.biteData = BOSS_FISH;
+        g.phase = 'bite';
+        g.biteFlash = t;
+        sfx.play('bite');
+      }
     }
     actionsRef.current.reelDown = () => { if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true }
     actionsRef.current.reelUp = () => { g.reeling = false }
