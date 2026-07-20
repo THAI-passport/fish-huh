@@ -139,7 +139,7 @@ export default function App() {
     function onKey(e) {
       if (e.key === 'Escape') {
         if (detail) setDetail(null)
-        else if (popup.item || popup.fish || popup.treasure) setPopup({})
+        else if (popup && (popup.item || popup.fish || popup.treasure)) setPopup(null)
         else if (panel) setPanel(null)
         else if (shopOpen) setShopOpen(false)
         else if (optionsOpen) setOptionsOpen(false)

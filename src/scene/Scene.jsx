@@ -81,7 +81,6 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
   useEffect(() => { baitTargetRef.current = baitTarget }, [baitTarget])
 
   useEffect(() => {
-    sfx.startAmbient()
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     let raf
@@ -277,6 +276,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     function onKeyDown(e) {
       if (e.code === 'Space' && uiPhase === 'idle' && !e.repeat) {
         e.preventDefault()
+        sfx.startAmbient()
         if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 250, g.targetY || 320) }
         else if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true
       }
@@ -1226,7 +1226,6 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       if (swimmers.length < 4) spawnSwimmer(true)
     }, 2500)
 
-    sfx.startAmbient()
     return () => {
       sfx.stopAmbient()
       cancelAnimationFrame(raf)
