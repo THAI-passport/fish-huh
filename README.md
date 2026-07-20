@@ -5,7 +5,7 @@ waters, from a freshwater lake down to a sunken wreck in the abyss. Every sprite
 every wave and every cloud is drawn in code — there is not a single image file in
 this repository.
 
-![game](/imge/game.png)
+![game](./image/game.png)
 
 ```
 npm install
