@@ -2,7 +2,7 @@
 // reviewed without launching the game. Run: node preview-vessel.mjs
 import zlib from 'node:zlib'
 import fs from 'node:fs'
-import { drawBoat, drawAngler, drawRod, boatMetrics, P } from './src/scene/vessel.js'
+import { drawBoat, drawAngler, drawRod, drawSub, boatMetrics, subMetrics, P } from './src/scene/vessel.js'
 
 // --- tiny fillRect-only canvas ------------------------------------------------
 function makeCanvas(w, h, bg) {
@@ -73,7 +73,7 @@ function png(canvas, path) {
 
 // --- scene ---------------------------------------------------------------
 const SCALE = 3 // upscale the whole preview so pixels are legible
-const W = 760, H = 620
+const W = 760, H = 700
 const c = makeCanvas(W, H, [22, 46, 74])
 
 function panel(x, y, label, night, pose, bend, tilt) {
@@ -112,6 +112,20 @@ function panel(x, y, label, night, pose, bend, tilt) {
   })
   void label
 }
+
+function subPanel(x, y, lightOn) {
+  const cx = x + 175, cy = y + 96
+  // abyss backdrop
+  c.fillStyle = '#0a1f3c'; c.fillRect(x, y - 6, 360, 200)
+  c.fillStyle = '#061424'; c.fillRect(x, y + 150, 360, 44)
+  for (let i = 0; i < 40; i++) {
+    c.fillStyle = 'rgba(210,225,240,0.28)'
+    c.fillRect(x + ((i * 47) % 356), y + ((i * 83) % 190), 2, 2)
+  }
+  drawSub(c, { cx, cy, t: 40, tilt: 0.03, aimX: cx - 120, aimY: cy + 80, lightOn })
+}
+subPanel(20, 455, true)
+subPanel(390, 455, false)
 
 // four states, 2x2
 panel(20, 10, 'day-idle', false, 'idle', 0, 0)

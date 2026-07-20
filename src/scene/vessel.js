@@ -204,6 +204,121 @@ export function drawBoat(ctx, opts) {
 }
 
 // ---------------------------------------------------------------------------
+// the submersible (abyss / wreck zones)
+// ---------------------------------------------------------------------------
+// Same rules as the boat: fillRect only, tilt via per-column shear. Replaces
+// the old vector-polygon sub, whose smooth ellipse and arcs clashed with the
+// pixel-quantized water.
+const SUB = {
+  hullA: '#c9a227', hullB: '#b08d1c', hullC: '#8a6c14', shadow: '#5c4708',
+  trim: '#e0c050', dark: '#3a2e08',
+  glass: '#0e2a3c', glassRim: '#e8d8a0',
+  lamp: '#fff3b0', lampCone: '#ffeaa0',
+  prop: '#8a6c14', propBlade: '#6b540e',
+}
+const SUB_W = 54
+// Hull as a stepped ellipse: [rowY, leftInset, rightInset] in art units.
+const SUB_ROWS = [
+  [-9, 20, 16], [-8, 13, 10], [-7, 8, 6], [-6, 5, 4], [-5, 3, 2],
+  [-4, 2, 1], [-3, 1, 0], [-2, 0, 0], [-1, 0, 0], [0, 0, 0], [1, 0, 0],
+  [2, 0, 0], [3, 1, 0], [4, 2, 1], [5, 3, 2], [6, 5, 4], [7, 8, 6],
+  [8, 13, 10], [9, 20, 16],
+]
+
+export function subMetrics(cx, cy) {
+  return { ox: Math.round(cx - (SUB_W * P) / 2), oy: Math.round(cy) }
+}
+
+// opts: { cx, cy, t, tilt, aimX, aimY, lightOn }
+// aimX/aimY are CANVAS px the headlight points at (normally the hook).
+export function drawSub(ctx, opts) {
+  const { cx, cy, t = 0, tilt = 0, aimX = null, aimY = null, lightOn = true } = opts
+  const { ox, oy } = subMetrics(cx, cy)
+  const pivot = SUB_W / 2
+  const b = plotter(ctx, ox, oy, tilt, pivot)
+
+  // ---- headlight cone, drawn first so the hull sits on top ----
+  // Stepped fan widening toward the aim point, in art units.
+  if (lightOn && aimX != null && aimY != null) {
+    const tipX = (aimX - ox) / P, tipY = (aimY - oy) / P
+    const steps = 16
+    for (let i = 1; i <= steps; i++) {
+      const u = i / steps
+      const x = -6 + (tipX + 6) * u
+      const y = 2 + (tipY - 2) * u
+      const w = 3 + u * 16
+      ctx.globalAlpha = 0.13 * (1 - u) + 0.02
+      b(Math.round(x - w / 2), Math.round(y), Math.round(w), 2, SUB.lampCone)
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // ---- hull ----
+  for (const [ry, li, ri] of SUB_ROWS) {
+    const w = SUB_W - li - ri
+    if (w <= 0) continue
+    let c = SUB.hullA
+    if (ry >= 3) c = SUB.hullB
+    if (ry >= 6) c = SUB.hullC
+    if (ry >= 8) c = SUB.shadow
+    if (ry <= -6) c = SUB.trim
+    b(li, ry, w, 1, c)
+  }
+  b(6, -5, SUB_W - 14, 1, SUB.trim)     // top highlight
+  b(8, 4, SUB_W - 18, 1, SUB.shadow)    // belly seam
+
+  // ---- conning tower + periscope ----
+  b(20, -16, 14, 7, SUB.hullB)
+  b(20, -17, 14, 1, SUB.trim)
+  b(20, -16, 1, 7, SUB.trim)
+  b(26, -21, 2, 5, SUB.dark)
+  b(25, -22, 4, 1, SUB.trim)
+
+  // ---- porthole + pilot ----
+  const pxo = 8, pyo = -1
+  b(pxo - 1, pyo - 5, 12, 11, SUB.glassRim)
+  b(pxo, pyo - 4, 10, 9, SUB.glass)
+  b(pxo + 2, pyo - 2, 4, 3, CREW.skin)
+  b(pxo + 2, pyo + 1, 5, 3, CREW.coat)
+  b(pxo + 2, pyo - 3, 4, 1, CREW.hat)
+  ctx.globalAlpha = 0.18
+  b(pxo, pyo - 4, 10, 3, '#ffffff')     // glass sheen
+  ctx.globalAlpha = 1
+  b(pxo + 1, pyo - 4, 2, 2, '#ffffff')  // glint
+
+  // ---- bow headlamp ----
+  b(-3, 0, 4, 5, SUB.hullC)
+  b(-4, 1, 2, 3, lightOn ? SUB.lamp : SUB.dark)
+  if (lightOn) glowDiamond(ctx, b, -3, 2, 7, SUB.lamp, 0.26)
+
+  // ---- propeller: 4-frame spin ----
+  const bladeH = [7, 4, 1, 4][Math.floor(t / 4) % 4]
+  b(SUB_W, -1, 5, 3, SUB.prop)
+  b(SUB_W + 4, -Math.floor(bladeH / 2), 3, bladeH, SUB.propBlade)
+  ctx.globalAlpha = 0.4
+  for (let i = 0; i < 4; i++) {
+    const bx = SUB_W + 8 + ((t * 0.6 + i * 9) % 26)
+    b(Math.round(bx), Math.round(-2 + Math.sin((t + i * 30) / 12) * 2), 2, 2, '#dff2ff')
+  }
+  ctx.globalAlpha = 1
+
+  // ---- stabiliser fins ----
+  b(SUB_W - 10, -13, 3, 5, SUB.hullC)
+  b(SUB_W - 10, 8, 3, 5, SUB.hullC)
+
+  // ---- winch arm: where the line leaves the hull ----
+  const armX = 22
+  b(armX, 9, 2, 5, SUB.hullC)
+  b(armX - 1, 13, 4, 1, SUB.trim)
+  const shear = Math.round((armX + 1 - pivot) * tilt)
+  return {
+    ox, oy, pivot, tilt,
+    rodTipX: ox + (armX + 1) * P,
+    rodTipY: oy + (14 + shear) * P,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // the angler — pose: 'idle' | 'cast' | 'reel'
 // ---------------------------------------------------------------------------
 // Body is a char grid; the rod arm is drawn procedurally so it can swing.

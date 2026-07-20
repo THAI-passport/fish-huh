@@ -16,6 +16,7 @@ import { catchValue } from './game.js'
 import Scene from './scene/Scene.jsx'
 import PixelFish from './pixel/PixelFish.jsx'
 import * as sfx from './audio/sfx.js'
+import { exportCatchCard } from './util/png.js'
 
 const SAVE_KEY = 'pixel-fishing-save-v7'
 const OLD_KEYS = ['pixel-fishing-save-v6', 'pixel-fishing-save-v5', 'pixel-fishing-save-v4']
@@ -132,7 +133,22 @@ export default function App() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)) } catch {}
   }, [save])
   useEffect(() => { sfx.setMuted(muted) }, [muted])
-  useEffect(() => { sfx.setVolume(save.volume) }, [save.volume])
+  useEffect(() => { sfx.updateVolume ? sfx.updateVolume(save.volume) : sfx.setVolume(save.volume) }, [save.volume])
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        if (detail) setDetail(null)
+        else if (popup.item || popup.fish || popup.treasure) setPopup({})
+        else if (panel) setPanel(null)
+        else if (shopOpen) setShopOpen(false)
+        else if (optionsOpen) setOptionsOpen(false)
+        else if (dexOpen) setDexOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [detail, popup, panel, shopOpen, optionsOpen, dexOpen])
 
   // reset the quest board when the day rolls over
   useEffect(() => {
@@ -1203,6 +1219,15 @@ export default function App() {
                 </div>
               </div>
               <p className="detail-blurb">{blurb(detail)}</p>
+              {save.dex[detail.id] && (
+                <button 
+                  className="btn small" 
+                  style={{ width: '100%', marginTop: '12px' }}
+                  onClick={() => exportCatchCard(detail, save.dex[detail.id].record, save.dex[detail.id].shiny)}
+                >
+                  Download Catch Card
+                </button>
+              )}
             </div>
           </div>
         )}

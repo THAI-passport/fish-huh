@@ -5,7 +5,7 @@ import { RARITY } from '../data/zones.js'
 import { rollSize } from '../game.js'
 import { rollTrash, rollTreasure } from '../data/items.js'
 import {
-  drawBoat as vBoat, drawAngler as vAngler, drawRod as vRod, P as VP,
+  drawBoat as vBoat, drawAngler as vAngler, drawRod as vRod, drawSub as vSub, P as VP,
 } from './vessel.js'
 import * as sfx from '../audio/sfx.js'
 
@@ -81,6 +81,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
   useEffect(() => { baitTargetRef.current = baitTarget }, [baitTarget])
 
   useEffect(() => {
+    sfx.startAmbient()
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     let raf
@@ -91,8 +92,14 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     const abyss = z.view === 'abyss'   // true deep-sea view: no sky, no boat
     const cold = !!z.cold              // ice zone: snow instead of rain
     const isWreck = !!z.wreck
-    const WATER = abyss ? 46 : 200     // in the abyss the "surface" is the winch line
+    let WATER = abyss ? 46 : 200     // in the abyss the "surface" is the winch line
     let weather = 'clear', weatherNext = 0, weatherSteer = 0, weatherLuck = 0, flash = 0
+
+    function getMoonPhase() { return (t / 40000) % 1 }
+    function isSpringTide() {
+      const m = getMoonPhase()
+      return m < 0.1 || (m > 0.4 && m < 0.6) || m > 0.9
+    }
 
     function daylight() {
       if (abyss) return 0.05
@@ -120,7 +127,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       const bait = (upgradesRef.current && upgradesRef.current.bait) || 0
       // relic luck adds fractional extra rarity re-rolls on top of bait/weather
       const relicLuck = luckRef.current || 0
-      const extra = Math.floor(relicLuck) + (Math.random() < relicLuck % 1 ? 1 : 0)
+      const extra = Math.floor(relicLuck) + (Math.random() < relicLuck % 1 ? 1 : 0) + (isSpringTide() ? 1 : 0)
       let data = weightedPick(pool, bait + weatherLuck + extra)
       // Time of day / weather now gate species, not just bite speed. Reroll
       // against the activity multiplier so night, storms and daylight each
@@ -189,6 +196,9 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       markerMul: 1,
       parts: [],
       shake: 0,
+      hole: null,
+      snagged: false,
+      snagTimer: 0,
     }
 
     // ---- reel-gauge tuning ----
@@ -221,7 +231,13 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     }
 
     function doCast(px, py) {
-      g.castX = abyss ? Math.max(80, Math.min(440, px)) : Math.max(110, Math.min(430, px))
+      if (zoneRef.current.id === 'ice' && !g.hole) {
+        g.hole = { x: Math.max(110, Math.min(430, px)) }
+        sfx.resume(); sfx.play('hit')
+        return
+      }
+      const cx = zoneRef.current.id === 'ice' ? g.hole.x : px
+      g.castX = abyss ? Math.max(80, Math.min(440, cx)) : Math.max(110, Math.min(430, cx))
       g.targetY = Math.max(WATER + 60, Math.min(H - 46, py < WATER + 60 ? 320 : py))
       g.hookY = WATER
       g.phase = 'dropping'
@@ -258,8 +274,21 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     actionsRef.current.reelDown = () => { if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true }
     actionsRef.current.reelUp = () => { g.reeling = false }
 
+    function onKeyDown(e) {
+      if (e.code === 'Space' && uiPhase === 'idle' && !e.repeat) {
+        e.preventDefault()
+        if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 250, g.targetY || 320) }
+        else if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true
+      }
+    }
+    function onKeyUp(e) {
+      if (e.code === 'Space') g.reeling = false
+    }
+
     canvas.addEventListener('pointerdown', onDown)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
 
     function finish(landed) {
       const data = g.biteData
@@ -347,6 +376,13 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       pxDisc(78, 48, 10, '#fffce0')
       ctx.globalAlpha = Math.max(0, 1 - d) * 0.9
       pxDisc(W - 84, 56, 22, '#dfe6ff')
+      
+      const mp = getMoonPhase()
+      const shadowX = (W - 84) - Math.cos(mp * Math.PI * 2) * 26
+      ctx.globalCompositeOperation = 'source-atop'
+      pxDisc(shadowX, 56, 22, '#101830')
+      ctx.globalCompositeOperation = 'source-over'
+      
       ctx.globalAlpha = Math.max(0, 1 - d) * 0.55
       pxDisc(W - 76, 50, 8, '#b9c4e8')
       ctx.globalAlpha = 1
@@ -546,13 +582,25 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           ctx.fillRect(x, Math.round(raw / PX) * PX, PX, PX)
         }
       }
-      // sub-surface shimmer band
-      ctx.fillStyle = shade(base, 46)
-      for (let x = 0; x <= W; x += PX * 2) {
-        if ((x / (PX * 2) + Math.floor(t / 10)) % 5 < 2) {
-          const raw = WATER + PX * 3 + Math.sin(x / 30 - t / 26) * 3
-          ctx.fillRect(x, Math.round(raw / PX) * PX, PX * 2, PX)
+      // full 2-layer scrolling caustics pattern below waterline
+      for (let layer = 0; layer < 2; layer++) {
+        ctx.fillStyle = layer === 0 ? shade(base, 25) : shade(base, 46)
+        ctx.globalAlpha = layer === 0 ? 0.3 : 0.6
+        const speed = layer === 0 ? t / 14 : -t / 26
+        const scale = layer === 0 ? 40 : 30
+        for (let y = WATER + PX * 2; y < H; y += PX * 4) {
+          for (let x = 0; x <= W; x += PX * 3) {
+            const rx = x + Math.sin(y / scale + speed) * (PX * 4)
+            if ((Math.floor(rx / (PX * 3)) + Math.floor(y / (PX * 4))) % 4 < 2) {
+              ctx.fillRect(Math.round(rx / PX) * PX, y, PX * 3, PX * 2)
+            }
+          }
         }
+      }
+      ctx.globalAlpha = 1
+      if (g.hole) {
+        ctx.fillStyle = 'rgba(10, 20, 30, 0.8)'
+        ctx.beginPath(); ctx.ellipse(g.hole.x, WATER, 16, 4, 0, 0, Math.PI * 2); ctx.fill()
       }
       // drifting ice floes on the fjord
       if (cold) {
@@ -656,58 +704,20 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       }
     }
 
-    // Little research submersible with a headlight cone.
+    // Pixel-art research submersible (src/scene/vessel.js). Replaces the old
+    // vector-polygon sub so the abyss matches the pixel-quantized water.
     function drawSub() {
-      const b = anchor()
-      const sx = b.hullX, sy = b.hullY
-      // headlight cone toward the hook / water below
-      const aimX = g.phase === 'idle' ? sx - 160 : g.castX
-      const aimY = g.phase === 'idle' ? sy + 260 : Math.max(sy + 120, g.hookY)
-      const grad = ctx.createLinearGradient(sx - 40, sy, aimX, aimY)
-      grad.addColorStop(0, 'rgba(255,240,180,0.20)')
-      grad.addColorStop(1, 'rgba(255,240,180,0)')
-      ctx.fillStyle = grad
-      ctx.beginPath()
-      ctx.moveTo(sx - 46, sy + 14)
-      ctx.lineTo(aimX - 70, aimY)
-      ctx.lineTo(aimX + 70, aimY)
-      ctx.lineTo(sx - 26, sy + 22)
-      ctx.closePath(); ctx.fill()
-
-      // hull
-      ctx.fillStyle = '#c9a227'
-      ctx.beginPath(); ctx.ellipse(sx, sy, 58, 26, 0, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#a8841c'
-      ctx.beginPath(); ctx.ellipse(sx, sy + 8, 54, 16, 0, 0, Math.PI * 2); ctx.fill()
-      // conning tower
-      ctx.fillStyle = '#c9a227'; ctx.fillRect(sx - 14, sy - 40, 28, 18)
-      ctx.fillStyle = '#8a6c14'; ctx.fillRect(sx - 14, sy - 42, 28, 4)
-      // viewport with pilot
-      ctx.fillStyle = '#0e2a3c'
-      ctx.beginPath(); ctx.arc(sx - 22, sy - 2, 13, 0, Math.PI * 2); ctx.fill()
-      ctx.strokeStyle = '#e8d8a0'; ctx.lineWidth = 3
-      ctx.beginPath(); ctx.arc(sx - 22, sy - 2, 13, 0, Math.PI * 2); ctx.stroke()
-      ctx.fillStyle = '#e0b48c'; ctx.fillRect(sx - 26, sy - 7, 7, 7) // pilot head
-      ctx.fillStyle = '#c0392b'; ctx.fillRect(sx - 27, sy, 9, 6)     // pilot body
-      // headlight lamp
-      ctx.fillStyle = '#fff3b0'
-      ctx.beginPath(); ctx.arc(sx - 50, sy + 12, 5, 0, Math.PI * 2); ctx.fill()
-      // propeller
-      const spin = Math.sin(t / 4)
-      ctx.fillStyle = '#8a6c14'
-      ctx.fillRect(sx + 56, sy - 3, 8, 6)
-      ctx.fillStyle = '#6b540e'
-      ctx.fillRect(sx + 62, sy - 2 - spin * 8, 4, 4 + Math.abs(spin) * 12)
-      // rising bubbles from the prop
-      ctx.fillStyle = 'rgba(255,255,255,0.4)'
-      for (let i = 0; i < 4; i++) {
-        const by = (sy - 10 - ((t * 1.4 + i * 26) % 90))
-        ctx.fillRect(sx + 60 + Math.sin(t / 14 + i) * 4, by, 3, 3)
-      }
-      // winch arm under the hull — line anchor
-      ctx.strokeStyle = '#8a6c14'; ctx.lineWidth = 4
-      ctx.beginPath(); ctx.moveTo(sx, sy + 22); ctx.lineTo(b.rodTipX, b.rodTipY); ctx.stroke()
-      return b
+      const bob = Math.sin(t / 55) * 2
+      const tilt = Math.sin(t / 62 + 0.4) * 0.035
+      const a = anchor()
+      // headlight tracks the hook once a cast is out, otherwise sweeps ahead
+      const aiming = g.phase !== 'idle' && g.phase !== 'retract'
+      const aimX = aiming ? g.castX : a.hullX - 150 + Math.sin(t / 90) * 40
+      const aimY = aiming ? Math.max(a.hullY + 90, g.hookY) : a.hullY + 260
+      return vSub(ctx, {
+        cx: a.hullX, cy: a.hullY + bob, t, tilt,
+        aimX, aimY, lightOn: true,
+      })
     }
 
     function drawLine(b) {
@@ -809,6 +819,14 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       ctx.fillStyle = '#eafaff'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'
       ctx.fillText(Math.round(g.progress) + '%', TRACK_X, TRACK_TOP - 20)
       ctx.textAlign = 'left'
+      if (g.snagged) {
+        ctx.fillStyle = '#ff3b3b'
+        ctx.fillRect(TRACK_X - 35, TRACK_TOP + TRACK_H / 2 - 14, 70, 28)
+        ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'
+        ctx.fillText('SNAG!', TRACK_X, TRACK_TOP + TRACK_H / 2 - 2)
+        ctx.fillText('TAP!', TRACK_X, TRACK_TOP + TRACK_H / 2 + 10)
+        ctx.textAlign = 'left'
+      }
     }
 
     function hint(text) {
@@ -866,6 +884,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     // ---- main loop ----
     function frame() {
       t++
+      WATER = abyss ? 46 : 200 + Math.sin(t / 1400) * 6
       // weather cycle (surface zones only)
       if (!abyss && t >= weatherNext) {
         const opts = cold
@@ -881,7 +900,8 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       ctx.clearRect(0, 0, W, H)
       ctx.save()
       if (g.shake > 0) {
-        const m = Math.min(5, g.shake * 0.5)
+        const noMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        const m = noMotion ? 0 : Math.min(5, g.shake * 0.5)
         ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m)
         g.shake--
       }
@@ -969,6 +989,10 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           if (g.special) g.specialAt = t + 90 + Math.random() * 160
         }
       } else if (g.phase === 'waiting') {
+        if (zoneRef.current.id === 'reef') {
+          g.castX += Math.sin(t / 80) * 0.3
+          g.castX = Math.max(110, Math.min(430, g.castX))
+        }
         if (g.special) {
           // something that isn't a fish is about to snag the line
           if (t >= g.specialAt) {
@@ -1012,7 +1036,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           const df = DIFF[difficultyRef.current] || DIFF.normal
           g.phase = 'fight'
           g.progress = START_PROGRESS * df.start + up.line * 5
-          g.barH = Math.max(46, 116 * df.bar + up.line * 10 - g.biteData.fight * 3)
+          g.barH = Math.min(TRACK_H - 10, Math.max(46, 116 * df.bar + up.line * 10 - g.biteData.fight * 3))
           g.lift = LIFT + up.rod * 0.07
           g.fill = FILL * df.fill + up.rod * 0.05
           g.drain = DRAIN * df.drain
@@ -1031,11 +1055,28 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           g.stam = 1
           g.style = g.biteData.kind ? 'steady' : fightStyleOf(g.biteData)
           g.burst = 0
+          if (zoneRef.current.id === 'wreck' && (!g.biteData.kind && g.biteData.id !== 'leviathan') && Math.random() < 0.08) {
+            g.snagged = true
+            g.snagTimer = 60
+          } else {
+            g.snagged = false
+          }
         }
       } else if (g.phase === 'fight') {
-        const f = g.biteData.fight
-        const half = g.barH / 2
-        g.barVel += GRAV
+        if (g.snagged) {
+          g.snagTimer--
+          if (g.reeling) {
+            g.snagged = false
+            g.reeling = false
+            g.shake = 10
+            sfx.play('hit')
+          } else if (g.snagTimer <= 0) {
+            g.snapped = true; sfx.play('escape'); finish(false)
+          }
+        } else {
+          const f = g.biteData.fight
+          const half = g.barH / 2
+          g.barVel += GRAV
         if (g.reeling) {
           g.barVel -= g.lift
           if (t % 7 === 0) sfx.play('reel')
@@ -1094,6 +1135,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         if (g.tension >= g.snapAt) { g.snapped = true; sfx.play('escape'); finish(false) } // line snapped
         else if (g.progress <= 0) finish(false)  // meter emptied — it escapes
         else if (g.progress >= 100) finish(true) // landed
+        }
       } else if (g.phase === 'retract') {
         g.hookY -= 6
         if (g.hookY <= WATER) { g.phase = 'idle'; g.biteData = null }
@@ -1118,7 +1160,8 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       } else if (g.phase === 'bite') {
         drawBite(t - g.biteFlash)
       } else if (g.phase === 'idle') {
-        hint(abyss ? 'Tap the dark to lower the winch — the lure glows' : 'Tap the water to cast — deeper taps sink the hook lower')
+        const hHint = zoneRef.current.id === 'ice' && !g.hole ? 'Tap to drill a hole in the ice' : 'Tap the water to cast — deeper taps sink the hook lower'
+        hint(abyss ? 'Tap the dark to lower the winch — the lure glows' : hHint)
       } else if (g.phase === 'waiting' || g.phase === 'dropping') {
         if (g.phase === 'waiting' && !abyss) drawBobber(WATER + Math.sin(t / 12) * 2)
         hint('…waiting for a bite…')
@@ -1142,6 +1185,32 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         flash--
       }
 
+      // rain-on-lens
+      if (weather === 'rain' || weather === 'storm') {
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'
+        for (let i = 0; i < 6; i++) {
+          const dx = (i * 277 + Math.sin(t / 200 + i) * 15) % W
+          const dy = ((i * 311 + Math.max(0, t * 0.1 - i * 15)) % (H + 40)) - 20
+          ctx.fillRect(Math.round(dx / PX) * PX, Math.round(dy / PX) * PX, PX, PX * 2)
+        }
+      }
+
+      // night vignette (stepped alpha rects for pixel-consistent dark edges)
+      const d = daylight()
+      if (d < 0.3) {
+        const vAlpha = (0.3 - d) / 0.3 * 0.6
+        ctx.fillStyle = `rgba(0,4,12,${vAlpha.toFixed(2)})`
+        ctx.fillRect(0, 0, W, PX * 3) // top
+        ctx.fillRect(0, H - PX * 3, W, PX * 3) // bot
+        ctx.fillRect(0, 0, PX * 3, H) // left
+        ctx.fillRect(W - PX * 3, 0, PX * 3, H) // right
+        ctx.fillStyle = `rgba(0,4,12,${(vAlpha * 0.5).toFixed(2)})`
+        ctx.fillRect(PX * 3, PX * 3, W - PX * 6, PX * 3)
+        ctx.fillRect(PX * 3, H - PX * 6, W - PX * 6, PX * 3)
+        ctx.fillRect(PX * 3, PX * 3, PX * 3, H - PX * 6)
+        ctx.fillRect(W - PX * 6, PX * 3, PX * 3, H - PX * 6)
+      }
+
       ctx.restore()
 
       if (g.phase !== lastPhase) { lastPhase = g.phase; setUiPhase(g.phase) }
@@ -1157,11 +1226,15 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       if (swimmers.length < 4) spawnSwimmer(true)
     }, 2500)
 
+    sfx.startAmbient()
     return () => {
+      sfx.stopAmbient()
       cancelAnimationFrame(raf)
       clearInterval(pop)
       canvas.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
     }
   }, [zone.id])
 
