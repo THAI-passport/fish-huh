@@ -1039,11 +1039,18 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         if (t - g.biteFlash > 36) {
           const up = upgradesRef.current || { rod: 0, line: 0, bait: 0 }
           const df = DIFF[difficultyRef.current] || DIFF.normal
+          // Diminishing returns past level 3. Upgrades used to scale linearly to
+          // the level-6 cap, which made even Hard ~95% automatic.
+          const eff = (l) => Math.min(l, 3) + Math.max(0, l - 3) * 0.45
+          const rodE = eff(up.rod), lineE = eff(up.line)
+          // Boss fish declare fight values above the 1-10 range every formula
+          // below assumes; clamp before use or barH/marker/tension all corrupt.
+          const fightV = Math.max(1, Math.min(10, g.biteData.fight))
           g.phase = 'fight'
-          g.progress = START_PROGRESS * df.start + up.line * 5
-          g.barH = Math.min(TRACK_H - 10, Math.max(46, 116 * df.bar + up.line * 10 - g.biteData.fight * 3))
-          g.lift = LIFT + up.rod * 0.07
-          g.fill = FILL * df.fill + up.rod * 0.05
+          g.progress = START_PROGRESS * df.start + lineE * 4
+          g.barH = Math.min(TRACK_H * 0.55, Math.max(46, 116 * df.bar + lineE * 8 - fightV * 3))
+          g.lift = LIFT + rodE * 0.055
+          g.fill = FILL * df.fill + rodE * 0.035
           g.drain = DRAIN * df.drain
           g.markerMul = df.marker * (g.biteData.kind === 'treasure' ? 0.6 : 1) // treasure is heavy, not darty
           g.barY = (TRACK_TOP + TRACK_BOT) / 2
@@ -1055,8 +1062,11 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           g.tension = 0
           g.snapAt = 100
           // tougher line takes longer to snap; tougher fish loads it faster
-          g.tensionUp = (1.9 + g.biteData.fight * 0.19) / (1 + up.line * 0.22)
-          g.tensionDown = 1.5 + up.line * 0.15
+          // Line reduces strain, but the divisor is CAPPED at level 3. Uncapped,
+          // line 6 made recovery outpace load on every fish and the snap
+          // mechanic silently stopped existing at max gear.
+          g.tensionUp = (1.9 + fightV * 0.19) / (1 + Math.min(up.line, 3) * 0.18)
+          g.tensionDown = 1.4 + Math.min(up.line, 3) * 0.10
           g.stam = 1
           g.style = g.biteData.kind ? 'steady' : fightStyleOf(g.biteData)
           g.burst = 0
