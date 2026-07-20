@@ -1047,8 +1047,8 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           s.baseY = Math.max(WATER + 24, Math.min(H - 16, s.baseY))
         }
 
-        if (s.x < -80) { s.x = W + 60; s.vx = Math.abs(s.vx) }
-        if (s.x > W + 80) { s.x = -60; s.vx = -Math.abs(s.vx) }
+        if (s.x < -80) { s.x = W + 60 }
+        if (s.x > W + 80) { s.x = -60 }
       }
 
       // phase logic
