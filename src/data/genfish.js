@@ -12,7 +12,6 @@
 //   &seed_prefix=v2&include=grids   (fishgen v2, generator 1)
 //   Fills the four zones the original pack could not reach.
 import pack from './genfish-pack.json'
-import grids from './genfish-grids.json'
 import pack2 from './genfish-pack2.json'
 import { TEMPLATES, registerGrids } from '../pixel/sprites.js'
 
@@ -23,19 +22,15 @@ Object.assign(TEMPLATES, pack.templates)
 Object.assign(TEMPLATES, pack2.templates)
 
 // Exact-pixel grids, remapped onto fish id so sprites.js can look them up.
-// The two packs key their grids DIFFERENTLY:
-//   pack 1 — separate file, keyed by fish SEED
-//   pack 2 — inline `grids`, keyed by TEMPLATE id
-// Both are optional; a missing or partial grid just falls back to the flat
-// char template rather than breaking the build.
+// Both packs ship grids inline, keyed by TEMPLATE id. (Pack 1 originally used a
+// separate seed-keyed file; that file is now unused.) Grids are optional — a
+// missing one just falls back to the flat char template rather than breaking.
 const byId = {}
-for (const f of pack.fish) {
-  const g = grids[f.seed]
-  if (Array.isArray(g) && g.length) byId[f.id] = g
-}
-for (const f of pack2.fish) {
-  const g = (pack2.grids || {})[f.template]
-  if (Array.isArray(g) && g.length) byId[f.id] = g
+for (const p of [pack, pack2]) {
+  for (const f of p.fish) {
+    const g = (p.grids || {})[f.template]
+    if (Array.isArray(g) && g.length) byId[f.id] = g
+  }
 }
 registerGrids(byId)
 
