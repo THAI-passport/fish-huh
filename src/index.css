@@ -154,8 +154,9 @@ body {
   }
   .scene-canvas {
     height: 100%;
-    object-fit: cover;
-    object-position: bottom;
+    width: 100%;
+    object-fit: contain;
+    object-position: center;
   }
   .scene-actions { bottom: 20px; }
 }
