@@ -242,7 +242,11 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       g.phase = 'dropping'
       // roll a non-fish catch for this cast
       const r = Math.random()
-      g.special = r < TRASH_CHANCE ? rollTrash() : r < TRASH_CHANCE + TREASURE_CHANCE ? rollTreasure() : null
+      if (zoneRef.current.id === 'deepsea' && r < 0.05) {
+        g.special = BOSS_FISH
+      } else {
+        g.special = r < TRASH_CHANCE ? rollTrash() : r < TRASH_CHANCE + TREASURE_CHANCE ? rollTreasure() : null
+      }
       sfx.resume(); sfx.play('cast')
       if (!abyss) spawnRipple(g.castX)
     }
@@ -1070,6 +1074,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           g.stam = 1
           g.style = g.biteData.kind ? 'steady' : fightStyleOf(g.biteData)
           g.burst = 0
+          g.bossPhase = -1
           if (zoneRef.current.id === 'wreck' && (!g.biteData.kind && g.biteData.id !== 'leviathan') && Math.random() < 0.08) {
             g.snagged = true
             g.snagTimer = 60
@@ -1140,6 +1145,28 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         const inZone = Math.abs(g.markerY - g.barY) <= half
         g.progress += inZone ? g.fill : -g.drain
         g.progress = Math.max(0, Math.min(100, g.progress))
+
+        if (g.biteData.phases) {
+          const p = g.biteData.phases
+          let active = -1
+          for (let i = 0; i < p.length; i++) {
+            if (g.progress >= p[i].at) active = i
+          }
+          if (active !== -1 && g.bossPhase !== active) {
+            g.bossPhase = active
+            const phase = p[active]
+            const up = upgradesRef.current || { rod: 0, line: 0, bait: 0 }
+            const df = DIFF[difficultyRef.current] || DIFF.normal
+            const lineE = Math.min(up.line, 3) + Math.max(0, up.line - 3) * 0.45
+            const fV = phase.fight
+            
+            g.barH = Math.max(38, Math.min(TRACK_H * 0.55, 116 * df.bar + lineE * 8 - fV * 3) * phase.barMul)
+            g.markerMul = df.marker * phase.markerMul
+            g.tensionUp = (1.9 + fV * 0.19) / (1 + Math.min(up.line, 3) * 0.18)
+            g.shake = 12
+            sfx.play('splash')
+          }
+        }
 
         // --- line tension: reeling loads the line, easing lets it recover ---
         // Fighting a fresh fish strains hardest; a tired one gives in.

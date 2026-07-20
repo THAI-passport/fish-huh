@@ -303,7 +303,12 @@ export function needsDeepCast(f) {
 export const BOSS_FISH = {
   id: 'leviathan', name: 'Leviathan (Boss)', habitat: 'deepsea', rarity: 'legendary', template: 'shark',
   palette: { body: '#1a1c23', fin: '#c0392b', tail: '#c0392b', dark: '#0a0a0d', lure: '#ff3b3b' },
-  minSize: 1000, maxSize: 3000, baseValue: 10000, fight: 18, biteMin: 1000, biteMax: 2000
+  minSize: 1000, maxSize: 3000, baseValue: 10000, fight: 18, biteMin: 1000, biteMax: 2000,
+  phases: [
+    { at: 0,  fight: 10, markerMul: 1.0, barMul: 1.0 },
+    { at: 33, fight: 14, markerMul: 1.4, barMul: 0.8 },
+    { at: 66, fight: 18, markerMul: 1.8, barMul: 0.6 }
+  ]
 }
 
 export function fishByZone(zoneId) {
