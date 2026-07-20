@@ -29,18 +29,20 @@ off — a player who never releases snaps the line essentially every time, and a
 player who eases at the warning almost never does. Fish also tire: the marker
 slows as you win, so fights open frantic and close controlled.
 
+**Casting skill and spook mechanics.** Hold to charge your cast power meter. Landing in the sweet spot (70–85%) performs a clean, silent cast. Missing the sweet spot creates a splash radius that spooks nearby fish, causing them to flee.
+
 **Species fight differently.** Five styles, assigned from each fish's own stats:
 runners sprint end to end, sounders dive for the bottom, huggers cling low,
-darters twitch constantly, and the rest hold steady.
+darters twitch constantly, and the rest hold steady. Multi-phase boss fish add escalating tension and changing fight patterns.
 
 **Fish behave differently in the water, too.** Small common species swim in
 shoals that follow a leader. Big predators hunt smaller swimmers and eat them —
 if one takes the fish you were luring, it's gone. Flat-bodied species hug the
 seabed and ignore a shallow cast.
 
-**Time and weather gate the roster.** Legendaries prefer the dark, shoals feed by
-day, predators surge in storms, anglerfish come out at night. The day/night cycle
-and weather aren't decoration.
+**Environment, tides, and weather gate the roster.** Legendaries prefer the dark,
+shoals feed by day, predators surge in storms, anglerfish come out at night.
+Tides and moon phases dynamically shift species spawn rates.
 
 ---
 
@@ -69,10 +71,11 @@ in a submersible with a headlight, through marine snow and bioluminescence.
 - **Hall of Fame** — 25 sea relics across six rarities up to mythic, each granting a permanent passive; complete a rarity tier for a set bonus
 - **Aquarium** — park caught species in six tanks for passive income while you're away
 - **Bait bench** — junk catches yield scrap; craft baits that target a specific class of fish
-- **Daily quests** — three per day, seeded from the date so the board is stable
+- **Daily quests & Contests** — three quests per day seeded from the date, plus Sprint Contest events
 - **Voyages** — prestige reset for a permanent stacking coin multiplier; keeps your Fishdex, relics and aquarium
 - **Shipyard** — hulls, flags and lanterns for your boat, purely cosmetic
-- **Trophy wall, Fishdex, achievements, stats** — the usual collection screens
+- **Trophy wall, Fishdex, achievements, stats, catch cards** — collection screens & exportable catch cards
+- **PWA & Accessibility** — offline PWA support, chiptune music & soundscapes, colorblind mode toggle
 - Junk, treasure, shiny variants, catch streaks
 
 ---
