@@ -1152,7 +1152,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
           for (let i = 0; i < p.length; i++) {
             if (g.progress >= p[i].at) active = i
           }
-          if (active !== -1 && g.bossPhase !== active) {
+          if (active !== -1 && active > g.bossPhase) {
             g.bossPhase = active
             const phase = p[active]
             const up = upgradesRef.current || { rod: 0, line: 0, bait: 0 }
@@ -1164,7 +1164,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
             g.markerMul = df.marker * phase.markerMul
             g.tensionUp = (1.9 + fV * 0.19) / (1 + Math.min(up.line, 3) * 0.18)
             g.shake = 12
-            sfx.play('splash')
+            sfx.play('bite')
           }
         }
 
