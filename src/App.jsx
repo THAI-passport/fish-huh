@@ -141,14 +141,11 @@ export default function App() {
         if (detail) setDetail(null)
         else if (popup && (popup.item || popup.fish || popup.treasure)) setPopup(null)
         else if (panel) setPanel(null)
-        else if (shopOpen) setShopOpen(false)
-        else if (optionsOpen) setOptionsOpen(false)
-        else if (dexOpen) setDexOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [detail, popup, panel, shopOpen, optionsOpen, dexOpen])
+  }, [detail, popup, panel])
 
   // reset the quest board when the day rolls over
   useEffect(() => {

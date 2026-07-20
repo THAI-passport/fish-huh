@@ -145,14 +145,12 @@ body {
 /* Mobile landscape: full screen canvas */
 @media (max-height: 500px) and (orientation: landscape) {
   body { overflow: hidden; } /* prevent scrolling on landscape */
-  .app { padding: 4px; gap: 4px; height: 100vh; max-height: 100vh; max-width: none; }
-  .topbar { padding: 0 10px; }
-  .zones { padding: 0 10px; }
-  .perk-strip { padding: 0 10px; }
+  .app { padding: 0; gap: 0; height: 100vh; max-height: 100vh; max-width: none; }
+  .topbar, .zones, .perk-strip { display: none; }
   .scene-holder {
     flex: 1;
     border: none; border-radius: 0;
-    margin: 0 -4px -4px -4px; /* bleed to edges */
+    margin: 0; /* bleed to edges */
   }
   .scene-canvas {
     height: 100%;
@@ -213,9 +211,13 @@ body {
 
 /* Mobile portrait: popup block under the game screen */
 @media (max-width: 600px) and (orientation: portrait) {
-  .scene-wrap {
+  .scene-holder {
     display: flex;
     flex-direction: column;
+  }
+  .scene-holder canvas {
+    flex: 1;
+    min-height: 0;
   }
   .popup {
     position: static;
@@ -227,6 +229,7 @@ body {
     padding: 14px 20px;
     border-width: 3px;
     border-radius: 12px;
+    animation: popIn 0.22s ease-out !important;
   }
   .popup canvas {
     max-width: none !important;
