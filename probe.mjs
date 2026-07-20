@@ -93,9 +93,9 @@ for (const z of ZONES) ok(rollFish(z.id), `rollFish ${z.id}`)
 const { GENFISH, GEN_META } = await import('./src/data/genfish.js')
 const packRaw = JSON.parse(fs.readFileSync('./src/data/genfish-pack.json', 'utf8'))
 
-ok(GENFISH.length === 24, 'expected 24 generated fish, got ' + GENFISH.length)
+ok(GENFISH.length >= 52, 'expected at least 52 generated fish, got ' + GENFISH.length)
 ok(GEN_META.generator === 1, 'generator version pinned to 1')
-ok(FISH.length === 103 + GENFISH.length, 'FISH must be BASE + GENFISH')
+ok(FISH.length === 103 + GENFISH.length, `FISH must be BASE + GENFISH (${FISH.length} vs ${103 + GENFISH.length})`)
 
 // every generated template got registered into the shared TEMPLATES table
 for (const [k, rows] of Object.entries(packRaw.templates)) {
@@ -135,7 +135,7 @@ for (const z of ZONES) {
   const b = zoneBreakdown[z.id]
   console.log(`  ${z.id.padEnd(9)} ${String(b.total).padStart(3)} / ${b.gen}`)
 }
-ok(Object.values(zoneBreakdown).reduce((s, b) => s + b.gen, 0) === 24, 'all 24 generated fish are reachable via fishByZone')
+ok(Object.values(zoneBreakdown).reduce((s, b) => s + b.gen, 0) === GENFISH.length, 'all generated fish are reachable via fishByZone')
 
 // rasterize one generated fish exactly as the catch popup would (drawFish)
 function raster(fish, scale = 1, flip = false, flap = 0) {
@@ -186,12 +186,12 @@ ok(tailMaxY(rFlap) > tailMaxY(r), 'flap did not shear the tail region downward')
 // ---------- exact-pixel FishGen grids (optional; empty file = flat fallback) ----------
 const { GRIDS, drawGenGrid, spriteDims } = await import('./src/pixel/sprites.js')
 const gridIds = Object.keys(GRIDS)
-console.log(`\nexact-pixel grids registered: ${gridIds.length}/24`)
+console.log(`\nexact-pixel grids registered: ${gridIds.length}/${GENFISH.length}`)
 
 if (gridIds.length === 0) {
   console.log('  (genfish-grids.json is empty — generated fish render as flat char templates)')
 } else {
-  ok(gridIds.length === 24, `expected 24 grids, got ${gridIds.length}`)
+  ok(gridIds.length === GENFISH.length, `grids ${gridIds.length} != generated ${GENFISH.length}`)
   for (const id of gridIds) {
     const g = GRIDS[id]
     const fish = GENFISH.find((f) => f.id === id)
