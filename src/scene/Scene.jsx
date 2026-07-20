@@ -229,7 +229,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       return { px, py }
     }
 
-    function doCast(px, py) {
+    function doCast(px, py, power = 1) {
       if (zoneRef.current.id === 'ice' && !g.hole) {
         g.hole = { x: Math.max(110, Math.min(430, px)) }
         sfx.resume(); sfx.play('hit')
@@ -248,26 +248,64 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         g.special = r < TRASH_CHANCE ? rollTrash() : r < TRASH_CHANCE + TREASURE_CHANCE ? rollTreasure() : null
       }
       sfx.resume(); sfx.play('cast')
-      if (!abyss) spawnRipple(g.castX)
+      
+      const isSweet = power >= 0.7 && power <= 0.85
+      const dev = power < 0.7 ? 0.7 - power : power > 0.85 ? power - 0.85 : 0
+      const mul = isSweet ? 1 : 1 + dev * 5
+      const splashRad = dev * 150
+      
+      if (!abyss) spawnRipple(g.castX, mul)
+      
+      if (!isSweet && splashRad > 0) {
+        for (const s of swimmers) {
+          const dx = s.x - g.castX
+          const dy = (s.baseY + s.yoff) - WATER
+          if (dx * dx + dy * dy < splashRad * splashRad) {
+            s.spooked = 40
+          }
+        }
+      }
     }
 
     function onDown(e) {
       e.preventDefault()
       sfx.startAmbient()
       if (sfx.startMusic) sfx.startMusic()
-      if (g.phase === 'idle') {
+      if (g.phase === 'idle' && !g.charging) {
         const { px, py } = pointer(e)
-        doCast(px, py)
+        // Instant handling for ice holes so we don't need to hold-to-charge them
+        if (zoneRef.current.id === 'ice' && !g.hole) {
+          doCast(px, py)
+          return
+        }
+        g.targetCastX = px
+        g.targetCastY = py
+        g.charging = true
+        g.power = 0
+        g.powerDir = 1
       } else if (g.phase === 'fight') {
         g.reeling = true
       }
     }
-    function onUp() { g.reeling = false }
+    function onUp() {
+      g.reeling = false
+      if (g.charging) {
+        g.charging = false
+        doCast(g.targetCastX, g.targetCastY, g.power)
+      }
+    }
 
-    actionsRef.current.cast = () => {
-      sfx.startAmbient()
-      if (sfx.startMusic) sfx.startMusic()
-      if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 260, g.targetY || 360) }
+    actionsRef.current.cast = () => { // legacy UI cast button if needed
+      if (g.phase === 'idle' && !g.charging) {
+        g.targetCastX = g.castX || 260
+        g.targetCastY = g.targetY || 360
+        g.charging = true
+        g.power = 0
+        g.powerDir = 1
+      } else if (g.charging) {
+        g.charging = false
+        doCast(g.targetCastX, g.targetCastY, g.power)
+      }
     }
     actionsRef.current.triggerBoss = () => {
       if (g.phase === 'idle') {
@@ -286,12 +324,24 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         e.preventDefault()
         sfx.startAmbient()
         if (sfx.startMusic) sfx.startMusic()
-        if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 250, g.targetY || 320) }
+        if (g.phase === 'idle' && !g.charging) {
+          g.targetCastX = g.castX || 250
+          g.targetCastY = g.targetY || 320
+          g.charging = true
+          g.power = 0
+          g.powerDir = 1
+        }
         else if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true
       }
     }
     function onKeyUp(e) {
-      if (e.code === 'Space') g.reeling = false
+      if (e.code === 'Space') {
+        g.reeling = false
+        if (g.charging) {
+          g.charging = false
+          doCast(g.targetCastX, g.targetCastY, g.power)
+        }
+      }
     }
 
     canvas.addEventListener('pointerdown', onDown)
@@ -339,12 +389,13 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       }
     }
 
-    function spawnRipple(x) {
-      for (let i = 0; i < 6; i++) {
+    function spawnRipple(x, mul = 1) {
+      const count = Math.max(1, Math.floor(6 * mul))
+      for (let i = 0; i < count; i++) {
         g.parts.push({
-          x: x + (Math.random() - 0.5) * 10, y: WATER,
-          vx: (Math.random() - 0.5) * 2.5, vy: -1 - Math.random() * 2.5,
-          life: 16 + Math.random() * 12, c: '#eafcff',
+          x: x + (Math.random() - 0.5) * 10 * mul, y: WATER,
+          vx: (Math.random() - 0.5) * 2.5 * mul, vy: (-1 - Math.random() * 2.5) * mul,
+          life: 16 + Math.random() * 12 * mul, c: '#eafcff',
         })
       }
     }
@@ -906,6 +957,12 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       }
       if (weather === 'storm' && Math.random() < 0.006) flash = 6
 
+      if (g.charging) {
+        g.power += (1 / 48) * g.powerDir
+        if (g.power >= 1) { g.power = 1; g.powerDir = -1 }
+        if (g.power <= 0) { g.power = 0; g.powerDir = 1 }
+      }
+
       ctx.clearRect(0, 0, W, H)
       ctx.save()
       if (g.shake > 0) {
@@ -931,7 +988,11 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
         s.yoff = Math.sin(s.wob) * 3
 
         // --- behavior steering (skipped for the fish being lured to the hook) ---
-        if (g.target !== s) {
+        if (s.spooked > 0) {
+          s.spooked--
+          s.x += s.vx * 2.5
+          if (g.target === s) g.target = null
+        } else if (g.target !== s) {
           if (s.behavior === 'school' && s.leader && swimmers.includes(s.leader)) {
             // cohesion toward the leader plus separation from close neighbours
             const L = s.leader
@@ -1190,6 +1251,25 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
 
       const b = abyss ? drawSub() : drawBoat()
       const hk = drawLine(b)
+      
+      if (g.charging) {
+        ctx.save()
+        const cx = b.x, cy = b.y - 60
+        ctx.fillStyle = '#000'
+        ctx.fillRect(cx - 30, cy - 5, 60, 10)
+        
+        ctx.fillStyle = '#ff3b3b'
+        ctx.fillRect(cx - 28, cy - 3, 56, 6)
+        
+        // Sweet spot
+        ctx.fillStyle = '#77f0b5'
+        ctx.fillRect(cx - 28 + 56 * 0.7, cy - 3, 56 * 0.15, 6)
+        
+        // Needle
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(cx - 28 + 56 * g.power - 1, cy - 6, 2, 12)
+        ctx.restore()
+      }
 
       if (g.phase === 'fight' && g.biteData) {
         const wig = Math.sin(t / 3) * 4
