@@ -114,3 +114,64 @@ export function updateVolume(v) {
   oldSetVol(v)
   if (ambientNodes) ambientNodes.g.gain.value = ambientNodes.baseVol * master
 }
+
+let musicVol = 0.5
+let musicLoopId = null
+let nextNoteTime = 0
+let beatIdx = 0
+
+export function setMusicVolume(v) { musicVol = Math.max(0, Math.min(1, v)) }
+export function getMusicVolume() { return musicVol }
+
+const BASS_SEQ = [ 130.81, 130.81, 155.56, 174.61, 130.81, 130.81, 155.56, 196.00 ]
+const ARP_SEQ = [ 261.63, 311.13, 392.00, 523.25, 261.63, 311.13, 392.00, 523.25 ]
+
+export function startMusic() {
+  const c = ac()
+  if (!c || muted) return
+  if (musicLoopId) return
+  nextNoteTime = c.currentTime + 0.1
+  beatIdx = 0
+  
+  musicLoopId = setInterval(() => {
+    while (nextNoteTime < c.currentTime + 0.1) {
+      scheduleNote(nextNoteTime, beatIdx)
+      nextNoteTime += 0.22 // ~136 BPM 8th notes
+      beatIdx = (beatIdx + 1) % 16
+    }
+  }, 30)
+}
+
+export function stopMusic() {
+  if (musicLoopId) {
+    clearInterval(musicLoopId)
+    musicLoopId = null
+  }
+}
+
+function scheduleNote(time, beat) {
+  const c = ac()
+  if (!c || muted || musicVol <= 0.01) return
+  
+  // play bass on every 2nd beat
+  if (beat % 2 === 0) {
+    const fb = BASS_SEQ[(beat / 2) % BASS_SEQ.length]
+    playTone(c, time, fb, 0.2, 'square', 0.1 * musicVol)
+  }
+  
+  // play arp on every beat
+  const fa = ARP_SEQ[beat % ARP_SEQ.length]
+  playTone(c, time, fa, 0.1, 'triangle', 0.08 * musicVol)
+}
+
+function playTone(c, t, freq, dur, type, vol) {
+  const o = c.createOscillator()
+  const g = c.createGain()
+  o.type = type
+  o.frequency.value = freq
+  o.connect(g); g.connect(c.destination)
+  g.gain.setValueAtTime(0.0001, t)
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.01)
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+  o.start(t); o.stop(t + dur + 0.05)
+}

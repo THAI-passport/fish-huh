@@ -249,6 +249,8 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
 
     function onDown(e) {
       e.preventDefault()
+      sfx.startAmbient()
+      if (sfx.startMusic) sfx.startMusic()
       if (g.phase === 'idle') {
         const { px, py } = pointer(e)
         doCast(px, py)
@@ -259,6 +261,8 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
     function onUp() { g.reeling = false }
 
     actionsRef.current.cast = () => {
+      sfx.startAmbient()
+      if (sfx.startMusic) sfx.startMusic()
       if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 260, g.targetY || 360) }
     }
     actionsRef.current.triggerBoss = () => {
@@ -277,6 +281,7 @@ export default function Scene({ zone, onResult, upgrades, difficulty = 'normal',
       if (e.code === 'Space' && uiPhase === 'idle' && !e.repeat) {
         e.preventDefault()
         sfx.startAmbient()
+        if (sfx.startMusic) sfx.startMusic()
         if (g.phase === 'idle') { sfx.resume(); doCast(g.castX || 250, g.targetY || 320) }
         else if (g.phase === 'fight' || g.phase === 'bite') g.reeling = true
       }

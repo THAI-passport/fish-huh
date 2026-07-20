@@ -18,3 +18,17 @@ export const RARITY = {
   epic:      { weight: 6,  color: '#b56cff', mult: 7 },
   legendary: { weight: 2,  color: '#ffb020', mult: 15 },
 }
+
+const PALETTE = {
+  default: ['#c9c9c9', '#5fd35f', '#5a9bff', '#b56cff', '#ffb020'],
+  cb:      ['#c9c9c9', '#009e73', '#56b4e9', '#e69f00', '#d55e00'] // Wong palette
+}
+
+export function setColorblind(active) {
+  const p = active ? PALETTE.cb : PALETTE.default
+  RARITY.common.color = p[0]
+  RARITY.uncommon.color = p[1]
+  RARITY.rare.color = p[2]
+  RARITY.epic.color = p[3]
+  RARITY.legendary.color = p[4]
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { ZONES, RARITY } from './data/zones.js'
+import { ZONES, RARITY, setColorblind } from './data/zones.js'
 import { FISH, fishByZone } from './data/fish.js'
 import { SHOP, MAX_LEVEL, nextCost } from './data/shop.js'
 import { ACHIEVEMENTS } from './data/achievements.js'
@@ -13,6 +13,7 @@ import { SLOTS, CAP_HOURS, fishRate, totalRate, pendingIncome, fmtRate } from '.
 import { BAITS, baitById, baitBonus, SCRAP_PER_TRASH } from './data/bait.js'
 import { prestigeStatus, applyPrestige, voyageMultiplier, VOYAGE_BONUS } from './data/prestige.js'
 import { catchValue } from './game.js'
+import { CONTEST_DURATION, CONTESTS } from './data/contest.js'
 import Scene from './scene/Scene.jsx'
 import PixelFish from './pixel/PixelFish.jsx'
 import * as sfx from './audio/sfx.js'
@@ -23,7 +24,7 @@ const OLD_KEYS = ['pixel-fishing-save-v6', 'pixel-fishing-save-v5', 'pixel-fishi
 const DEFAULT = {
   coins: 0, unlocked: ['fresh'], dex: {},
   upgrades: { rod: 0, line: 0, bait: 0 },
-  stats: { maxStreak: 0, shinies: 0, coinsEarned: 0, trash: 0, treasure: 0, questsDone: 0 },
+  stats: { maxStreak: 0, shinies: 0, coinsEarned: 0, trash: 0, treasure: 0, questsDone: 0, contestBest: 0 },
   achievements: [],
   quests: { date: '', progress: {}, claimed: [] },
   relics: {},                                   // id -> { count }
@@ -36,6 +37,8 @@ const DEFAULT = {
   tutorialSeen: false,
   difficulty: 'normal',
   volume: 0.8,
+  musicVolume: 0.5,
+  colorblind: false,
 }
 const SHINY_CHANCE = 0.025
 const GOLD = { body: '#f4cf4a', fin: '#fff2a8', tail: '#ffdf5c', dark: '#8a6a10' }
@@ -98,6 +101,7 @@ export default function App() {
   const floatId = useRef(0)
   const [detail, setDetail] = useState(null)
   const [reveal, setReveal] = useState(null)   // crate result card
+  const [contest, setContest] = useState({ active: false, endsAt: 0, score: 0 })
   const [daily, setDaily] = useState(null)     // login streak card
   const [ioMsg, setIoMsg] = useState('')
   const [relicDetail, setRelicDetail] = useState(null)
@@ -118,6 +122,22 @@ export default function App() {
   const aqRate = totalRate(save.aquarium?.slots || [])
   const aqPending = pendingIncome(save.aquarium || {}, Date.now())
 
+  // Contest loop
+  useEffect(() => {
+    if (!contest.active) return
+    const id = setInterval(() => {
+      setContest(c => {
+        if (Date.now() >= c.endsAt) {
+          setReveal({ type: 'contest', score: c.score })
+          setSave(s => ({ ...s, stats: { ...s.stats, contestBest: Math.max(s.stats.contestBest || 0, c.score) } }))
+          return { ...c, active: false }
+        }
+        return { ...c, _tick: Date.now() }
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [contest.active])
+
   // refresh the aquarium readout once a second while its panel is open
   useEffect(() => {
     if (panel !== 'aquarium') return
@@ -134,6 +154,8 @@ export default function App() {
   }, [save])
   useEffect(() => { sfx.setMuted(muted) }, [muted])
   useEffect(() => { sfx.updateVolume ? sfx.updateVolume(save.volume) : sfx.setVolume(save.volume) }, [save.volume])
+  useEffect(() => { if (sfx.setMusicVolume) sfx.setMusicVolume(save.musicVolume ?? 0.5) }, [save.musicVolume])
+  useEffect(() => { setColorblind(save.colorblind) }, [save.colorblind])
 
   useEffect(() => {
     function onKey(e) {
@@ -228,6 +250,7 @@ export default function App() {
       const value = Math.round((isTreasure ? rollTreasureValue(fish) : fish.value) * (1 + perks.coin) * voyageMult)
       const scrapGain = isTreasure ? 0 : SCRAP_PER_TRASH
       pushFloat(value)
+      setContest(c => c.active ? { ...c, score: c.score + value } : c)
       setPopup({ fish, size: 0, value, landed: true, item: true, treasure: isTreasure, scrap: scrapGain })
       setSave((s) => ({
         ...s,
@@ -263,6 +286,7 @@ export default function App() {
       }
       setPopup({ fish, size, value, landed, isNew, isRecord, mult, shiny })
       pushFloat(value)
+      setContest(c => c.active ? { ...c, score: c.score + value } : c)
       setSave((s) => {
         const p = s.dex[fish.id] || { count: 0, record: 0, shiny: false }
         return {
@@ -496,6 +520,10 @@ export default function App() {
           <div className="coin-floats">
             {floats.map((f) => <span key={f.id} className="coin-float">+{f.amount} 🪙</span>)}
           </div>
+          <button className="btn small" onClick={() => {
+            if (contest.active) return
+            setContest({ active: true, endsAt: Date.now() + CONTEST_DURATION, score: 0 })
+          }} disabled={contest.active}>🏆 {contest.active ? 'Running' : 'Sprint'}</button>
           {streak > 1 && <div className="chip streak">🔥 {streak}</div>}
           {save.prestige?.voyages > 0 && (
             <div className="chip voyage" title={`${save.prestige.voyages} voyage(s) — ×${voyageMult.toFixed(2)} coins`}>
@@ -529,6 +557,13 @@ export default function App() {
           <button className="chip icon" title="Sound" onClick={() => setMuted((m) => !m)}>{muted ? '🔇' : '🔊'}</button>
         </div>
       </header>
+
+      {contest.active && (
+        <div className="contest-bar" style={{ textAlign: 'center', background: '#12233a', padding: '6px', borderRadius: '8px', border: '2px solid #24384f', margin: '0 10px', display: 'flex', justifyContent: 'space-between' }}>
+          <span>⏱️ {Math.max(0, Math.ceil((contest.endsAt - Date.now()) / 1000))}s</span>
+          <span style={{ color: '#ffd23c', fontWeight: 'bold' }}>🪙 {contest.score}</span>
+        </div>
+      )}
 
       {(perks.coin > 0 || liveLuck > 0 || liveBite > 0 || perks.shiny > 0 || save.bait?.active) && (
         <div className="perk-strip">
@@ -595,6 +630,16 @@ export default function App() {
             skin={skin}
             baitTarget={bBonus.target}
           />
+        ) : reveal?.type === 'contest' ? (
+          <div className="locked-panel">
+            <h2>🏆 Contest Finished!</h2>
+            <div style={{ fontSize: '24px', margin: '20px 0', color: '#ffd23c' }}>Score: 🪙 {reveal.score}</div>
+            <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '20px' }}>
+              Previous Best: 🪙 {save.stats.contestBest || 0}
+              {reveal.score > (save.stats.contestBest || 0) && <div style={{ color: '#5fd06a', marginTop: '4px' }}>New Record!</div>}
+            </div>
+            <button className="btn" onClick={() => setReveal(null)}>Awesome</button>
+          </div>
         ) : (
           <div className="locked-panel" style={{ background: `linear-gradient(#0c2740, ${zoneData.bg})` }}>
             <p>{zoneData.icon} {zoneData.name} is locked.</p>
@@ -1264,12 +1309,20 @@ export default function App() {
                 <button className="x" onClick={() => setPanel(null)}>✕</button>
               </div>
               <div className="set-row">
-                <label>Volume</label>
+                <label>SFX Volume</label>
                 <input
                   type="range" min="0" max="100" value={Math.round(save.volume * 100)}
                   onChange={(e) => { const v = +e.target.value / 100; sfx.setVolume(v); setSave((s) => ({ ...s, volume: v })) }}
                 />
                 <span className="set-val">{Math.round(save.volume * 100)}</span>
+              </div>
+              <div className="set-row">
+                <label>Music Volume</label>
+                <input
+                  type="range" min="0" max="100" value={Math.round((save.musicVolume ?? 0.5) * 100)}
+                  onChange={(e) => { const v = +e.target.value / 100; if(sfx.setMusicVolume) sfx.setMusicVolume(v); setSave((s) => ({ ...s, musicVolume: v })) }}
+                />
+                <span className="set-val">{Math.round((save.musicVolume ?? 0.5) * 100)}</span>
               </div>
               <div className="set-row">
                 <label>Difficulty</label>
@@ -1278,6 +1331,12 @@ export default function App() {
                     <button key={d} className={'seg-btn' + (save.difficulty === d ? ' on' : '')} onClick={() => setSave((s) => ({ ...s, difficulty: d }))}>{d}</button>
                   ))}
                 </div>
+              </div>
+              <div className="set-row">
+                <label>Colorblind Mode</label>
+                <button className={'seg-btn' + (save.colorblind ? ' on' : '')} onClick={() => setSave((s) => ({ ...s, colorblind: !s.colorblind }))}>
+                  {save.colorblind ? 'ON' : 'OFF'}
+                </button>
               </div>
               <div className="set-row io-row">
                 <label>Backup</label>
